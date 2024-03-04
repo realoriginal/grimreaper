@@ -729,7 +729,7 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 	} while ( 0 );
 
 	if ( Th5 != NULL ) {
-		Api.NtTerminateThread( Thd, STATUS_SUCCES );
+		Api.NtTerminateThread( Th5, STATUS_SUCCESS );
 		Api.NtClose( Th5 );
 	};
 	if ( Th4 != NULL ) {

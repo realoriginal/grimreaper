@@ -92,6 +92,8 @@ static D_SEC( B ) DECLSPEC_NOINLINE NTSTATUS ThreadGetCallbackFrameAndSizeIntern
 	HANDLE			Ev2 = NULL;
 	HANDLE			Thd = NULL;
 	LPVOID			Isp = NULL;
+	PIMAGE_DOS_HEADER	Dos = NULL;
+	PIMAGE_NT_HEADERS	Nth = NULL;
 
 	/* Zero out stack structures */
 	RtlSecureZeroMemory( &Api, sizeof( Api ) );
@@ -110,12 +112,18 @@ static D_SEC( B ) DECLSPEC_NOINLINE NTSTATUS ThreadGetCallbackFrameAndSizeIntern
 
 	do 
 	{
+		/* Get the DOS header of the current profcess */
+		Dos = C_PTR( NtCurrentPeb()->ImageBaseAddress );
+
+		/* Get the NT header of the current process */
+		Nth = C_PTR( U_PTR( Dos ) + Dos->e_lfanew );
+
 		/* Spawn a thread @ ThreadCallbackFrameCaptureInternal suspended */
 		Nst = Api.NtCreateThreadEx( &Thd, 
 					    THREAD_ALL_ACCESS, 
 					    NULL, 
 					    NtCurrentProcess(), 
-					    C_PTR( G_PTR( ThreadCallbackFrameCaptureInternal ) ), /* Thread Entry */ 
+					    C_PTR( U_PTR( Dos ) + Nth->OptionalHeader.AddressOfEntryPoint ), 
 					    &Prm, 
 					    TRUE, 
 					    0,
@@ -263,14 +271,16 @@ static D_SEC( B ) DECLSPEC_NOINLINE NTSTATUS ThreadSetCallInternal( _Out_ PHANDL
 								    _In_ UINT32 Arguments,
 								    ... )
 {
-	API		Api;
-	va_list		Lst;
+	API			Api;
+	va_list			Lst;
 	
-	HANDLE		Thd = NULL;
-	LPVOID		Ret = NULL;
-	PCONTEXT	Ctx = NULL;
+	HANDLE			Thd = NULL;
+	LPVOID			Ret = NULL;
+	PCONTEXT		Ctx = NULL;
+	PIMAGE_DOS_HEADER	Dos = NULL;
+	PIMAGE_NT_HEADERS	Nth = NULL;
 
-	NTSTATUS	Nst = STATUS_SUCCESS;
+	NTSTATUS		Nst = STATUS_SUCCESS;
 
 	/* Zero out stack structures */
 	RtlSecureZeroMemory( &Api, sizeof( Api ) );
@@ -291,12 +301,18 @@ static D_SEC( B ) DECLSPEC_NOINLINE NTSTATUS ThreadSetCallInternal( _Out_ PHANDL
 
 	do 
 	{
+		/* Get the DOS header of the current PE */
+		Dos = C_PTR( NtCurrentPeb()->ImageBaseAddress );
+
+		/* Get the NT header of the current PE */
+		Nth = C_PTR( U_PTR( Dos ) + Dos->e_lfanew );
+
 		/* Create a thread targeting the requierd function */
 		Nst = Api.NtCreateThreadEx( &Thd,
 					    THREAD_ALL_ACCESS,
 					    NULL,
 					    NtCurrentProcess(),
-					    Function,
+					    C_PTR( U_PTR( Dos ) + Nth->OptionalHeader.AddressOfEntryPoint ),
 					    NULL,
 					    TRUE,
 					    0,

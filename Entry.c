@@ -26,5 +26,5 @@
 !*/
 D_SEC( B ) VOID WINAPI Entry( VOID )
 {
-	ObfNtWaitForSingleObject( NtCurrentThread(), FALSE, NULL );
+	/* Do stuff here */
 };

